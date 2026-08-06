@@ -80,7 +80,11 @@ def end_effector_link0_relative_pose(
     asset: Articulation = env.scene[asset_cfg.name]
 
     ee_ids, _ = asset.find_bodies("end_effector")
-    link0_ids, _ = asset.find_bodies("link0")
+    # Other arm tasks use ``link0``; the D1+Piper URDF names this frame
+    # ``piper_base_link``.  ``find_bodies`` raises for an unknown name, so
+    # inspect the already-resolved body-name list before selecting the frame.
+    link0_name = "link0" if "link0" in asset.body_names else "piper_base_link"
+    link0_ids, _ = asset.find_bodies(link0_name)
 
     if len(ee_ids) == 0 or len(link0_ids) == 0:
         return torch.zeros((env.num_envs, 7), device=env.device)
@@ -119,12 +123,12 @@ def joint_pos_rel(
         "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint",
         "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint",
         "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint",
-        "joint.*",
+        "joint[1-6]",
     ],
 ) -> torch.Tensor:
     """Joint positions relative to default positions.
 
-    Includes all leg joints plus arm joints (matched by ``joint.*``).
+    Includes all leg joints plus the six actively driven arm joints.
     Joint order is preserved as given.
     """
     asset: Articulation = env.scene[asset_cfg.name]
@@ -145,12 +149,12 @@ def joint_vel_rel(
         "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint",
         "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint",
         "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint",
-        "joint.*",
+        "joint[1-6]",
     ],
 ) -> torch.Tensor:
     """Joint velocities relative to default velocities.
 
-    Includes all leg joints plus arm joints (matched by ``joint.*``).
+    Includes all leg joints plus the six actively driven arm joints.
     Joint order is preserved as given.
     """
     asset: Articulation = env.scene[asset_cfg.name]

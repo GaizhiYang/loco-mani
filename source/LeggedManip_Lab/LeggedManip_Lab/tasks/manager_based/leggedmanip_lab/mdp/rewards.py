@@ -41,7 +41,11 @@ if TYPE_CHECKING:
 
 
 def position_command_b_error_exp(
-    env: ManagerBasedRLEnv, command_name: str, std: float, asset_cfg: SceneEntityCfg
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    std: float,
+    asset_cfg: SceneEntityCfg,
+    link0_name: str = "link0",
 ) -> torch.Tensor:
     """Reward end-effector position tracking in the robot's body frame (link0 frame)
     using an exponential kernel.
@@ -51,7 +55,10 @@ def position_command_b_error_exp(
     """
     asset: RigidObject = env.scene[asset_cfg.name]
     command = env.command_manager.get_command(command_name)
-    root_idx = asset.find_bodies("link0")[0][0]
+    if link0_name not in asset.body_names and link0_name == "link0":
+        link0_name = "piper_base_link"
+    root_ids, _ = asset.find_bodies(link0_name)
+    root_idx = root_ids[0]
     end_effector_curr_pos_b = (
         asset.data.body_pos_w[:, asset_cfg.body_ids[0]]
         - asset.data.body_pos_w[:, root_idx]
@@ -77,6 +84,8 @@ def position_command_error_exp(
     """
     asset: RigidObject = env.scene[asset_cfg.name]
     ee_id = asset_cfg.body_ids[0]
+    if link0_name not in asset.body_names and link0_name == "link0":
+        link0_name = "piper_base_link"
     link0_id, _ = asset.find_bodies(link0_name)
     link0_id = link0_id[0]
     command = env.command_manager.get_command(command_name)
