@@ -14,6 +14,7 @@
 
 from isaaclab.utils import configclass
 #from ...leggedmanip_lab_env_cfg import LeggedManipLabEnvCfg
+from .d1_piper_common_env_cfg import D1PiperBaseEnvCfg
 # from LeggedManip_Lab.assets.go2_piper_old.go2arm_articulation_cfg import GO2_PIPER_CFG
 #from LeggedManip_Lab.assets.go2_piper.go2_piper_articulation_cfg import GO2_PIPER_CFG
 
@@ -46,10 +47,10 @@ class D1PiperFlatEnvCfg(D1PiperBaseEnvCfg):
 
         
         # actions
-        self.actions.joint_pos.scale = 0.25
-        self.actions.joint_pos.clip = {".*": (-10.0, 10.0)}
+        # self.actions.joint_pos.scale = 0.25
+        # self.actions.joint_pos.clip = {".*": (-10.0, 10.0)}
         # rewards
-        self.rewards.track_base_height_exp.params["target_height"] = 0.28
+        # self.rewards.track_base_height_exp.params["target_height"] = 0.28
 
         # terminals
         self.disable_zero_weight_rewards()

@@ -14,7 +14,7 @@
 
 from isaaclab.utils import configclass
 #from ...leggedmanip_lab_env_cfg import LeggedManipLabEnvCfg
-
+from .d1_piper_common_env_cfg import D1PiperBaseEnvCfg
 #from LeggedManip_Lab.assets.go2_piper.go2_piper_articulation_cfg import GO2_PIPER_CFG
 from LeggedManip_Lab.assets.d1_piper_l.d1_piper_articulation_cfg import D1_PIPER_CFG
 #from LeggedManip_Lab.tasks.manager_based.leggedmanip_lab.leggedmanip_lab_env_cfg import *
@@ -39,9 +39,9 @@ class WBCCommandsCfg:
             yaw=(-0.0, -0.0),
         ),
         limit_ranges=mdp.command_cfg.UniformPoseWBCCommandCfg.Ranges(
-            pos_x=(0.45, 0.7),
+            pos_x=(0.3, 0.6),
             pos_y=(-0.35, 0.35),
-            pos_z=(0.1, 0.8),  # World frame
+            pos_z=(0.25, 0.8),  # World frame
             roll=(-3.14 / 3, 3.14 / 3),
             pitch=(-3.14 / 4, 3.14 / 4),  # depends on end-effector axis
             yaw=(-3.14 / 6, 3.14 / 6),
@@ -61,8 +61,8 @@ class WBCCommandsCfg:
             heading=(-0.0, 0.0),
         ),
         limit_ranges=mdp.command_cfg.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-1.0, 1.0),
-            lin_vel_y=(-0.6, 0.6),
+            lin_vel_x=(-0.8, 0.8),
+            lin_vel_y=(-0.5, 0.5),
             ang_vel_z=(-1.0, 1.0),
             heading=(-0.0, 0.0),
         ),
@@ -87,16 +87,16 @@ class D1PiperWBCEnvCfg(D1PiperBaseEnvCfg):
 
         # events
         self.events.push_robot = None
+        self.events.randomize_rigid_body_inertia = None
 
         # commands
-        # self.commands.ee_pose.curriculum_enabled = True
+        self.commands.ee_pose.curriculum_enabled = True
         
         # actions
-        self.actions.joint_pos.scale = 0.25
-        self.actions.joint_pos.clip = {".*": (-10.0, 10.0)}
+        # self.actions.joint_pos.scale = 0.25
+        # self.actions.joint_pos.clip = {".*": (-10.0, 10.0)}
         
         # rewards
-        self.rewards.track_base_height_exp.params["target_height"] = 0.28
         self.rewards.end_effector_position_tracking_exp.func = mdp.position_command_error_exp
         self.rewards.end_effector_position_tracking_exp.params["link0_name"] = "piper_base_link"
         self.rewards.end_effector_position_tracking_exp.weight = 4.5
@@ -105,9 +105,7 @@ class D1PiperWBCEnvCfg(D1PiperBaseEnvCfg):
         self.rewards.track_ang_vel_z_exp.weight = 2.5
 
         self.rewards.track_base_height_exp.weight = 0.25
-        self.rewards.flat_orientation_l2.weight = -0.5
-        self.rewards.feet_long_air.weight = -1.0
-        self.rewards.air_time_variance.weight = -1.5
+        self.rewards.flat_orientation_l2.weight = -1.0
         # terminals
 
         self.disable_zero_weight_rewards()

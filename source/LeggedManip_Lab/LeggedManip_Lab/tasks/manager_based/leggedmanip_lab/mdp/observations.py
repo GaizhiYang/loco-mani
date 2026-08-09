@@ -141,6 +141,34 @@ def joint_pos_rel(
     on_inspect=[record_joint_names, record_dtype, record_shape, record_joint_vel_offsets],
     units="rad/s",
 )
+
+def joint_pos_rel_without_wheel(
+    env: ManagerBasedEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    wheel_asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """The joint positions of the asset w.r.t. the default joint positions.(Without the wheel joints)"""
+    # extract the used quantities (to enable type-hinting)
+    asset: Articulation = env.scene[asset_cfg.name]
+    joint_pos_rel = asset.data.joint_pos[:, asset_cfg.joint_ids] - asset.data.default_joint_pos[:, asset_cfg.joint_ids]
+
+    # Filter out wheel joints
+    # Note: wheel_asset_cfg.joint_ids are simulation indices, we need to find their position in the observation vector
+    if isinstance(asset_cfg.joint_ids, slice):
+        all_joint_indices = list(range(asset.num_joints))[asset_cfg.joint_ids]
+    else:
+        all_joint_indices = asset_cfg.joint_ids
+
+    if isinstance(wheel_asset_cfg.joint_ids, slice):
+        wheel_joint_indices = list(range(asset.num_joints))[wheel_asset_cfg.joint_ids]
+    else:
+        wheel_joint_indices = wheel_asset_cfg.joint_ids
+
+    wheel_indices = [i for i, joint_id in enumerate(all_joint_indices) if joint_id in wheel_joint_indices]
+    joint_pos_rel[:, wheel_indices] = 0.0
+    # print(joint_pos_rel[0])
+    return joint_pos_rel
+
 def joint_vel_rel(
     env: ManagerBasedEnv,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),

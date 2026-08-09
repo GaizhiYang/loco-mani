@@ -127,13 +127,13 @@ Train a policy with RSL-RL PPO:
 python scripts/rsl_rl/train.py --task GO2-PIPER-Flat --num_envs 4096 --headless --max_iterations 5000
 
 # Whole-body control training
-python scripts/rsl_rl/train.py --task GO2-PIPER-WBC --num_envs 4096 --headless --max_iterations 5000
+python scripts/rsl_rl/train.py --task D1-PIPER-WBC --num_envs 4096 --headless --max_iterations 10000
 ```
 
 ### Play / Inference
 
 ```bash
-python scripts/rsl_rl/play.py --task GO2-PIPER-Flat --headless
+python scripts/rsl_rl/play.py --task D1-PIPER-WBC --headless
 ```
 
 ### Debug
