@@ -1,0 +1,106 @@
+<?xml version="1.0"?>
+<robot name="box">
+  <!--
+    Open-top box with external dimensions:
+      length X = 0.40 m
+      width  Y = 0.30 m
+      height Z = 0.20 m
+      wall thickness = 0.03 m
+      total mass = 0.40 kg
+
+    The link frame is at the center of the outside bottom face.
+    The box therefore rests on z=0 when the link origin is at z=0.
+  -->
+  <link name="box">
+    <inertial>
+      <!-- Center of mass computed from the bottom and four side plates. -->
+      <origin xyz="0 0 0.0794549763" rpy="0 0 0"/>
+      <mass value="0.4"/>
+      <!-- Inertia about the link-frame axes, expressed at the COM. -->
+      <inertia
+        ixx="0.00602724295"
+        ixy="0"
+        ixz="0"
+        iyy="0.00890844358"
+        iyz="0"
+        izz="0.01183968404"/>
+    </inertial>
+
+    <!-- Bottom plate -->
+    <visual name="bottom_visual">
+      <origin xyz="0 0 0.015" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.4 0.3 0.03"/>
+      </geometry>
+      <material name="box_blue">
+        <color rgba="0.12 0.35 0.85 1.0"/>
+      </material>
+    </visual>
+    <collision name="bottom_collision">
+      <origin xyz="0 0 0.015" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.4 0.3 0.03"/>
+      </geometry>
+    </collision>
+
+    <!-- Left wall -->
+    <visual name="left_wall_visual">
+      <origin xyz="-0.185 0 0.115" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.03 0.3 0.17"/>
+      </geometry>
+      <material name="box_blue"/>
+    </visual>
+    <collision name="left_wall_collision">
+      <origin xyz="-0.185 0 0.115" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.03 0.3 0.17"/>
+      </geometry>
+    </collision>
+
+    <!-- Right wall -->
+    <visual name="right_wall_visual">
+      <origin xyz="0.185 0 0.115" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.03 0.3 0.17"/>
+      </geometry>
+      <material name="box_blue"/>
+    </visual>
+    <collision name="right_wall_collision">
+      <origin xyz="0.185 0 0.115" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.03 0.3 0.17"/>
+      </geometry>
+    </collision>
+
+    <!-- Front wall -->
+    <visual name="front_wall_visual">
+      <origin xyz="0 -0.135 0.115" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.34 0.03 0.17"/>
+      </geometry>
+      <material name="box_blue"/>
+    </visual>
+    <collision name="front_wall_collision">
+      <origin xyz="0 -0.135 0.115" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.34 0.03 0.17"/>
+      </geometry>
+    </collision>
+
+    <!-- Back wall -->
+    <visual name="back_wall_visual">
+      <origin xyz="0 0.135 0.115" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.34 0.03 0.17"/>
+      </geometry>
+      <material name="box_blue"/>
+    </visual>
+    <collision name="back_wall_collision">
+      <origin xyz="0 0.135 0.115" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.34 0.03 0.17"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>

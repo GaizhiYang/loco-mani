@@ -41,9 +41,9 @@ class WBCCommandsCfg:
         limit_ranges=mdp.command_cfg.UniformPoseWBCCommandCfg.Ranges(
             pos_x=(0.3, 0.6),
             pos_y=(-0.35, 0.35),
-            pos_z=(0.25, 0.8),  # World frame
+            pos_z=(0.15, 0.8),  # World frame
             roll=(-3.14 / 3, 3.14 / 3),
-            pitch=(-3.14 / 4, 3.14 / 4),  # depends on end-effector axis
+            pitch=(-3.14 / 2, 3.14 / 2),  # depends on end-effector axis
             yaw=(-3.14 / 6, 3.14 / 6),
         ),
     )
