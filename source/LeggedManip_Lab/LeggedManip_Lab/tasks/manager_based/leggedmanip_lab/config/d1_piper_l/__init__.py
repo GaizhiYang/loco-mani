@@ -43,3 +43,23 @@ gym.register(
     },
 )
 
+# Differential IK arm control
+gym.register(
+    id="D1-PIPER-IK",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.ik_env_cfg:D1PiperIKEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:D1PiperIKPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="D1-PIPER-IK-Play",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.ik_env_cfg:D1PiperIKEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:D1PiperIKPPORunnerCfg",
+    },
+)

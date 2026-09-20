@@ -119,6 +119,33 @@ def orientation_command_error(
     return quat_error_magnitude(curr_quat_w, des_quat_w)
 
 
+def orientation_command_b_error(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    asset_cfg: SceneEntityCfg,
+    link0_name: str = "piper_base_link",
+) -> torch.Tensor:
+    """End-effector orientation error for a command relative to ``link0``.
+
+    The command quaternion is defined as ``q_link0_ee``.  Convert it to the
+    world frame with ``q_world_link0 * q_link0_ee`` before comparing it with
+    the measured end-effector orientation.
+    """
+
+    asset: Articulation = env.scene[asset_cfg.name]
+    if link0_name not in asset.body_names and link0_name == "link0":
+        link0_name = "piper_base_link"
+    link0_ids, _ = asset.find_bodies(link0_name)
+    if len(link0_ids) != 1:
+        raise ValueError(f"Expected one link0 body named '{link0_name}', found {len(link0_ids)}.")
+
+    command = env.command_manager.get_command(command_name)
+    link0_quat_w = asset.data.body_quat_w[:, link0_ids[0]]
+    desired_quat_w = quat_mul(link0_quat_w, command[:, 3:7])
+    current_quat_w = asset.data.body_quat_w[:, asset_cfg.body_ids[0]]
+    return quat_error_magnitude(current_quat_w, desired_quat_w)
+
+
 # ---------------------------------------------------------------------------
 # Task rewards — base velocity / height tracking
 # ---------------------------------------------------------------------------
@@ -155,6 +182,31 @@ def track_ang_vel_z_exp(
         - asset.data.root_ang_vel_b[:, 2]
     )
     return torch.exp(-ang_vel_error / std**2)
+
+
+def stand_still_base_velocity(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    command_threshold: float = 0.1,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize base motion when the sampled velocity command is near zero.
+
+    The command is considered a standing command when the norm of its linear
+    and yaw components is below ``command_threshold``.  During standing, any
+    base linear velocity or yaw angular velocity is penalized quadratically.  For
+    non-standing commands this term is zero, so it does not interfere with
+    normal velocity tracking.
+    """
+    asset: RigidObject = env.scene[asset_cfg.name]
+    command = env.command_manager.get_command(command_name)
+
+    # UniformVelocityCommand returns [vx, vy, wz, (heading)].  Only the
+    # commanded velocity components determine whether the robot should stand.
+    command_is_small = torch.linalg.norm(command[:, :3], dim=1) < command_threshold
+    base_motion = torch.sum(torch.square(asset.data.root_lin_vel_b), dim=1)
+    base_motion += torch.square(asset.data.root_ang_vel_b[:, 2])
+    return base_motion * command_is_small.to(dtype=base_motion.dtype)
 
 
 def base_height_tracking(

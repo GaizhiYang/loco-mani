@@ -100,3 +100,10 @@ class D1PiperWBCPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         max_grad_norm=1.0,
     )
 
+
+# Differential-IK arm task
+@configclass
+class D1PiperIKPPORunnerCfg(D1PiperWBCPPORunnerCfg):
+    """PPO configuration for the task-space differential-IK action task."""
+
+    experiment_name = "d1_piper_ik"

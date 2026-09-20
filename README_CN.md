@@ -125,16 +125,16 @@ python scripts/list_envs.py
 
 ```bash
 # 平坦地形训练
-python scripts/rsl_rl/train.py --task GO2-PIPER-Flat --num_envs 4096 --headless --max_iterations 5000
+python scripts/rsl_rl/train.py --task D1-PIPER-Flat --num_envs 4096 --headless --max_iterations 5000
 
 # 全身控制训练
-python scripts/rsl_rl/train.py --task GO2-PIPER-WBC --num_envs 4096 --headless --max_iterations 5000
+python scripts/rsl_rl/train.py --task D1-PIPER-WBC --num_envs 4096 --headless --max_iterations 5000
 ```
 
 ### 推理 / 策略评估
 
 ```bash
-python scripts/rsl_rl/play.py --task GO2-PIPER-Flat --headless
+python scripts/rsl_rl/play.py --task D1-PIPER-WBC --headless
 ```
 
 

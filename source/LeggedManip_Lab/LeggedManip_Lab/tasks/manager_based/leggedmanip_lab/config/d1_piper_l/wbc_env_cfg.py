@@ -35,16 +35,16 @@ class WBCCommandsCfg:
             pos_y=(-0.05, 0.05),
             pos_z=(0.5, 0.5),  # World frame
             roll=(-0.0, 0.0),
-            pitch=(-0.0, -0.0),  # depends on end-effector axis
+            pitch=(-1.0, -1.0),  # depends on end-effector axis
             yaw=(-0.0, -0.0),
         ),
         limit_ranges=mdp.command_cfg.UniformPoseWBCCommandCfg.Ranges(
-            pos_x=(0.3, 0.6),
-            pos_y=(-0.35, 0.35),
-            pos_z=(0.15, 0.8),  # World frame
-            roll=(-3.14 / 3, 3.14 / 3),
-            pitch=(-3.14 / 2, 3.14 / 2),  # depends on end-effector axis
-            yaw=(-3.14 / 6, 3.14 / 6),
+            pos_x=(0.2, 0.6),
+            pos_y=(-0.4, 0.4),
+            pos_z=(0.2, 0.7),  # World frame
+            roll=(0.97, 2.17),
+            pitch=(-1.27, 0.7),  # depends on end-effector axis
+            yaw=(-1.4, 1.4),
         ),
     )
 

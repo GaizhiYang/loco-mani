@@ -917,7 +917,7 @@
     <!-- Stable task-space frame used by the WBC command and reward configs. -->
     <link name="end_effector"/>
     <joint name="end_effector_joint" type="fixed">
-        <origin xyz="0.0 0 0.10" rpy="0 -1.5707963 0"/>
+        <origin xyz="0.0 0 0.10" rpy="0 0 0"/>
         <parent link="flange_link"/>
         <child link="end_effector"/>
     </joint>

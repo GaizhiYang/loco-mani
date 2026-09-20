@@ -218,3 +218,24 @@ def last_action(env: ManagerBasedEnv, action_name: str | None = None) -> torch.T
 def generated_commands(env: "ManagerBasedRLEnv", command_name: str | None = None) -> torch.Tensor:
     """The current active command from the command manager."""
     return env.command_manager.get_command(command_name)
+
+
+@generic_io_descriptor(dtype=torch.float32, observation_type="Action", on_inspect=[record_shape])
+def last_leg_action(env: ManagerBasedEnv) -> torch.Tensor:
+    """Return only the previous D1 leg/wheel action.
+
+    The D1 IK task has a zero-dimensional command-driven arm action term.  In
+    addition to making that fact explicit, selecting the eight leg terms by
+    name keeps this observation correct if a future arm action term acquires a
+    non-zero dimension.  The returned order matches the action-manager order:
+    FL position/velocity, FR position/velocity, RL position/velocity, and RR
+    position/velocity (3+1 repeated four times = 16 values).
+    """
+    action_term_names = (
+        "joint_pos_fl", "joint_vel_fl",
+        "joint_pos_fr", "joint_vel_fr",
+        "joint_pos_rl", "joint_vel_rl",
+        "joint_pos_rr", "joint_vel_rr",
+    )
+    action_terms = [env.action_manager.get_term(name).raw_actions for name in action_term_names]
+    return torch.cat(action_terms, dim=-1)

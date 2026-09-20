@@ -41,12 +41,27 @@ from ... import mdp
 
 D1_WHEEL_NAMES = ["FL_foot_joint", "FR_foot_joint", "RL_foot_joint", "RR_foot_joint"]
 
+# The policy-controlled D1 leg/wheel joints.  Keep the wheel joints in this
+# list: ``joint_pos_rel_without_wheel`` masks their position values to zero,
+# while ``joint_vel_rel`` exposes their measured wheel velocities.
+D1_LEG_JOINT_NAMES = [
+    "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint", "FL_foot_joint",
+    "FR_hip_joint", "FR_thigh_joint", "FR_calf_joint", "FR_foot_joint",
+    "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint", "RL_foot_joint",
+    "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint", "RR_foot_joint",
+]
+
 D1_ALL_JOINT_NAMES = ["FL_hip_joint", "FL_thigh_joint", "FL_calf_joint", "FL_foot_joint",
                     "FR_hip_joint", "FR_thigh_joint", "FR_calf_joint", "FR_foot_joint",
                     "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint", "RL_foot_joint",
                     "RR_hip_joint", "RR_thigh_joint","RR_calf_joint", "RR_foot_joint",
                     "joint1", "joint2", "joint3", "joint4", "joint5", "joint6"]
 
+POS_JOINT_NAMES = ["FL_hip_joint", "FL_thigh_joint", "FL_calf_joint",
+                    "FR_hip_joint", "FR_thigh_joint", "FR_calf_joint",
+                    "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint",
+                    "RR_hip_joint", "RR_thigh_joint","RR_calf_joint",
+                    "joint1", "joint2", "joint3", "joint4", "joint5", "joint6"]
 
 ##
 # Scene definition
@@ -218,20 +233,30 @@ class CommandsCfg:
         resampling_time_range=(8.0, 10.0),
         debug_vis=True,
         ranges=mdp.command_cfg.UniformPoseCommandCfg.Ranges(
-            pos_x=(0.4, 0.45),
-            pos_y=(-0.05, 0.05),
-            pos_z=(0.05, 0.05),  # base frame
-            roll=(-0.0, 0.0),
-            pitch=(-0.0, -0.0),  # depends on end-effector axis
-            yaw=(-0.0, -0.0),
+            # All six pose components are expressed in piper_base_link.  The
+            # current URDF defines end_effector as a zero-rotation fixed child
+            # of flange_link.  With the bent IK reset pose its nominal Euler
+            # orientation is approximately (roll, pitch, yaw)=(0, 1.48, 0).
+            # The command must be centered on that frame, rather than on the
+            # old USD's pitch near zero (which came from the removed -pi/2
+            # end-effector offset).
+            pos_x=(0.25, 0.35),
+            pos_y=(-0.10, 0.10),
+            pos_z=(0.25, 0.40),
+            roll=(-0.10, 0.10),
+            pitch=(1.30, 1.65),
+            yaw=(-0.20, 0.20),
         ),
         limit_ranges=mdp.command_cfg.UniformPoseCommandCfg.Ranges(
-            pos_x=(0.4, 0.7),
-            pos_y=(-0.35, 0.35),
-            pos_z=(-0.2, 0.5),  # base frame
-            roll=(-0.0, 0.0),
-            pitch=(-0.0, -0.0),  # depends on end-effector axis
-            yaw=(-0.0, -0.0),
+            # Conservative reachable workspace for Piper-L.  These limits are
+            # also expressed in the current piper_base_link/end_effector
+            # convention and leave margin around the arm joint limits.
+            pos_x=(0.15, 0.50),
+            pos_y=(-0.30, 0.30),
+            pos_z=(0.10, 0.55),
+            roll=(-0.45, 0.45),
+            pitch=(0.90, 2.00),
+            yaw=(-0.60, 0.60),
         ),
     )
 
@@ -543,6 +568,17 @@ class RewardsCfg:
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
 
+    # When the sampled velocity command is close to zero, strongly discourage
+    # any base translation or yaw rotation so the robot learns to remain still.
+    stand_still_base_velocity = RewTerm(
+        func=mdp.stand_still_base_velocity,
+        weight=-5.0,
+        params={
+            "command_name": "base_velocity",
+            "command_threshold": 0.1,
+        },
+    )
+
     track_base_height_exp = RewTerm(
         func=mdp.base_height_tracking, 
         weight=1.0,
@@ -567,7 +603,17 @@ class RewardsCfg:
     )  # - 0.0002
 
 
-    dof_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    joint_acc_l2 = RewTerm(
+        func=mdp.joint_acc_l2,
+        weight=-2.5e-7,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=POS_JOINT_NAMES)},
+    )
+
+    joint_acc_wheel_l2 = RewTerm(
+        func=mdp.joint_acc_l2,
+        weight=-2.5e-9,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_foot_joint"])},
+    )
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
     joint_power = RewTerm(func=mdp.joint_power, weight=-2e-5)
 
