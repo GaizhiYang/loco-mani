@@ -32,10 +32,16 @@ from isaaclab.utils import configclass
 from ... import mdp
 from .d1_piper_common_env_cfg import CommandsCfg, D1_LEG_JOINT_NAMES, D1_WHEEL_NAMES
 from .wbc_env_cfg import D1PiperWBCEnvCfg
+from .d1_piper_common_env_cfg import D1PiperBaseEnvCfg
 
+from .d1_piper_common_env_cfg import D1PiperBaseEnvCfg
+#from LeggedManip_Lab.assets.go2_piper.go2_piper_articulation_cfg import GO2_PIPER_CFG
+from LeggedManip_Lab.assets.d1_piper_l.d1_piper_articulation_cfg import D1_PIPER_CFG
+#from LeggedManip_Lab.tasks.manager_based.leggedmanip_lab.leggedmanip_lab_env_cfg import *
+from LeggedManip_Lab.tasks.manager_based.leggedmanip_lab.config.d1_piper_l.d1_piper_common_env_cfg import *
 
 @configclass
-class D1PiperIKEnvCfg(D1PiperWBCEnvCfg):
+class D1PiperIKEnvCfg(D1PiperBaseEnvCfg):
     """D1-Piper task with 16-D leg policy and command-driven arm IK."""
 
     # Unlike WBC, this task uses the standard body-pose command.  Its complete
@@ -44,6 +50,23 @@ class D1PiperIKEnvCfg(D1PiperWBCEnvCfg):
 
     def __post_init__(self) -> None:
         super().__post_init__()
+
+                # scene
+        self.scene.robot: ArticulationCfg = D1_PIPER_CFG.replace(
+            prim_path="{ENV_REGEX_NS}/Robot"
+        )
+
+        # observations
+
+        # curriculum
+
+        # events
+        #self.events.push_robot = None
+        self.events.randomize_rigid_body_inertia = None
+        self.events.reset_robot_joints = None
+
+        # commands
+        self.commands.ee_pose.curriculum_enabled = True
 
         # The all-zero Piper pose has a nearly singular 6-D pose Jacobian.
         # Start this IK task from the same interior, bent configuration used
@@ -110,6 +133,33 @@ class D1PiperIKEnvCfg(D1PiperWBCEnvCfg):
         self.rewards.end_effector_position_tracking_exp.params["link0_name"] = "piper_base_link"
         self.rewards.end_effector_orientation_tracking.func = mdp.orientation_command_b_error
         self.rewards.end_effector_orientation_tracking.params["link0_name"] = "piper_base_link"
+        self.rewards.end_effector_position_tracking_exp.weight = 0
+        self.rewards.end_effector_orientation_tracking.weight = 0
+
+        self.rewards.joint_power.weight = -2e-5  # powers
+        self.rewards.track_lin_vel_xy_exp.weight = 3.5  # tracking_lin_vel
+        self.rewards.track_ang_vel_z_exp.weight = 1.5  # tracking_ang_vel
+        self.rewards.ang_vel_xy_l2.weight = -0.05  # ang_vel_xy
+        self.rewards.dof_pos_limits.weight = -2.0 #-2.0  # dof_pos_limits
+        self.rewards.joint_acc_l2.weight = -2.5e-7  # dof_acc
+        #self.rewards.undesired_contacts.weight = -1.0  # collision
+        self.rewards.action_rate_l2.weight = -0.01  # action_rate
+        self.rewards.stand_still.weight = -1.0
+        self.rewards.stand_nice.weight = -2.0
+        #self.rewards.dont_wait.weight = -0.5  # dont_wait
+        # self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_hip_l1", -0.2, HIP_JOINT_NAMES)
+        # self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_l1", -0.1, [".*thigh_joint", ".*calf_joint"])
+        self.rewards.upward.weight = 0.25
+        #self.rewards.lin_vel_z_l2.weight = 0
+        #self.rewards.feet_gait.weight = 1.0  # 鼓励 步态
+        self.rewards.wheel_body_speed_match.weight = -0.2  # 鼓励轮地速度匹配
+        #self.rewards.joint_mirror.weight = -0.1  # 鼓励左右对称
+
+        self.rewards.flat_orientation_l2.weight = -1.0 #-0.25  # 鼓励
+        self.rewards.base_height.weight = -1.0  # 鼓励保持合适高度
+
+        self.disable_zero_weight_rewards()
+        
 
 
 @configclass

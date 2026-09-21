@@ -20,10 +20,10 @@ from typing import TYPE_CHECKING
 
 import torch
 import isaaclab.utils.math as math_utils
-
+from isaaclab.envs import mdp
 from isaaclab.assets import Articulation, RigidObject
 from isaaclab.managers import SceneEntityCfg
-from isaaclab.sensors import ContactSensor
+from isaaclab.sensors import ContactSensor, RayCaster
 from isaaclab.utils.math import (
     combine_frame_transforms,
     quat_error_magnitude,
@@ -38,6 +38,82 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Task rewards — end-effector pose tracking
 # ---------------------------------------------------------------------------
+def wheel_body_speed_match_l2(
+    env: ManagerBasedRLEnv,
+    wheel_radius: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize mismatch between each wheel's linear speed and body forward speed.
+
+    The penalty is applied to each wheel individually, encouraging all wheels
+    to match the body's forward speed (direction and magnitude).
+    """
+    asset: Articulation = env.scene[asset_cfg.name]
+
+    wheel_ang_vel = asset.data.joint_vel[:, asset_cfg.joint_ids]  # (num_envs, num_wheels)
+    wheel_lin_speed = wheel_ang_vel * wheel_radius  # (num_envs, num_wheels) - signed speed
+    body_speed = asset.data.root_lin_vel_b[:, 0]  # (num_envs,) - signed body speed
+
+    # Expand body_speed to match wheel dimensions for element-wise comparison
+    body_speed_expanded = body_speed.unsqueeze(1)  # (num_envs, 1)
+
+    # Compute per-wheel speed mismatch (preserves direction information)
+    speed_err_per_wheel = torch.square(wheel_lin_speed - body_speed_expanded)  # (num_envs, num_wheels)
+
+    # Sum across all wheels for each environment
+    speed_err = torch.sum(speed_err_per_wheel, dim=1)
+
+    return speed_err
+
+
+def upward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Penalize z-axis base linear velocity using L2 squared kernel."""
+    # extract the used quantities (to enable type-hinting)
+    asset: RigidObject = env.scene[asset_cfg.name]
+    reward = torch.square(1 - asset.data.projected_gravity_b[:, 2])
+    return reward
+
+
+def stand_still(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    command_threshold: float = 0.06,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize offsets from the default joint positions when the command is very small."""
+    # Penalize motion when command is nearly zero.
+    reward = mdp.joint_deviation_l1(env, asset_cfg)
+    reward *= torch.norm(env.command_manager.get_command(command_name), dim=1) < command_threshold
+    reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
+    return reward
+
+def stand_nice(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    command_threshold: float = 0.06,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize base velocity and joint position offsets when the command is very small."""
+    asset: Articulation = env.scene[asset_cfg.name]
+
+    if getattr(asset_cfg, "joint_names", None):
+        joint_ids = [asset.find_joints(joint_name)[0] for joint_name in asset_cfg.joint_names]
+        joint_ids = torch.as_tensor(joint_ids, device=env.device, dtype=torch.long)
+    else:
+        joint_ids = asset_cfg.joint_ids
+
+    diff = asset.data.joint_pos[:, joint_ids] - asset.data.default_joint_pos[:, joint_ids]
+    joint_pos_error = torch.sum(torch.square(diff).reshape(diff.shape[0], -1), dim=1)
+
+    body_vel_error = torch.sum(torch.square(asset.data.root_lin_vel_b), dim=1) + torch.sum(
+        torch.square(asset.data.root_ang_vel_b), dim=1
+    )
+
+    cmd_gate = torch.norm(env.command_manager.get_command(command_name), dim=1) < command_threshold
+
+    reward = (body_vel_error + joint_pos_error) * cmd_gate.to(dtype=body_vel_error.dtype)
+    reward = reward * (torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7)
+    return reward
 
 
 def position_command_b_error_exp(
@@ -220,6 +296,36 @@ def base_height_tracking(
     curr_height = asset.data.root_pos_w[:, 2]
     height_error = torch.abs(target_height - curr_height)
     return torch.exp(-height_error / std)
+
+def base_height_l2(
+    env: ManagerBasedRLEnv,
+    target_height: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    sensor_cfg: SceneEntityCfg | None = None,
+) -> torch.Tensor:
+    """Penalize asset height from its target using L2 squared kernel.
+
+    Note:
+        For flat terrain, target height is in the world frame. For rough terrain,
+        sensor readings can adjust the target height to account for the terrain.
+    """
+    # extract the used quantities (to enable type-hinting)
+    asset: RigidObject = env.scene[asset_cfg.name]
+    if sensor_cfg is not None:
+        sensor: RayCaster = env.scene[sensor_cfg.name]
+        # Adjust the target height using the sensor data
+        ray_hits = sensor.data.ray_hits_w[..., 2]
+        if torch.isnan(ray_hits).any() or torch.isinf(ray_hits).any() or torch.max(torch.abs(ray_hits)) > 1e6:
+            adjusted_target_height = asset.data.root_link_pos_w[:, 2]
+        else:
+            adjusted_target_height = target_height + torch.mean(ray_hits, dim=1)
+    else:
+        # Use the provided target height directly for flat terrain
+        adjusted_target_height = target_height
+    # Compute the L2 squared penalty
+    reward = torch.square(asset.data.root_pos_w[:, 2] - adjusted_target_height)
+    reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
+    return reward
 
 
 # ---------------------------------------------------------------------------

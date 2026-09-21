@@ -28,7 +28,7 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import ContactSensorCfg
+from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
@@ -38,6 +38,8 @@ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 # ``mdp`` belongs to the shared leggedmanip_lab package, not this task
 # configuration package.
 from ... import mdp
+
+BASE_LINK_NAME = "base_link"
 
 D1_WHEEL_NAMES = ["FL_foot_joint", "FR_foot_joint", "RL_foot_joint", "RR_foot_joint"]
 
@@ -98,6 +100,17 @@ class SceneCfg(InteractiveSceneCfg):
     contact_forces = ContactSensorCfg(
         prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True
     )
+
+        # sensors
+    height_scanner = RayCasterCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base_link",
+        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
+        ray_alignment="yaw",
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
+        debug_vis=False,
+        mesh_prim_paths=["/World/ground"],
+    )
+    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=10, track_air_time=True)
 
     # lights
     sky_light = AssetBaseCfg(
@@ -581,7 +594,7 @@ class RewardsCfg:
 
     track_base_height_exp = RewTerm(
         func=mdp.base_height_tracking, 
-        weight=1.0,
+        weight=2.0,
         params={ 
             "target_height": 0.45,  
             "std": 0.02
@@ -648,7 +661,7 @@ class RewardsCfg:
 
     joint_mirror = RewTerm(
         func=mdp.joint_mirror,
-        weight=-0.15,
+        weight=-0.0,
         params={
             "asset_cfg": SceneEntityCfg("robot"),
             "mirror_joints": [
@@ -701,6 +714,43 @@ class RewardsCfg:
                     "joint[1-6]",
                 ],
             ),
+        },
+    )
+    stand_still = RewTerm(
+        func=mdp.stand_still,
+        weight=-0.0,
+        params={
+            "command_name": "base_velocity",
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=D1_LEG_JOINT_NAMES),
+        },
+    )
+
+    stand_nice = RewTerm(
+        func=mdp.stand_nice,
+        weight=0.0,
+        params={
+            "command_name": "base_velocity",
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=D1_LEG_JOINT_NAMES),
+        },
+    )
+    upward = RewTerm(func=mdp.upward, weight=0.1)
+    wheel_body_speed_match = RewTerm(
+        func=mdp.wheel_body_speed_match_l2,
+        weight=-0.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=D1_WHEEL_NAMES),
+            "wheel_radius": 0.0925,
+        },
+    )
+    base_height = RewTerm(
+        func=mdp.base_height_l2,
+        weight=0,
+        params={
+            "target_height": 0.45,
+            "asset_cfg": SceneEntityCfg("robot", body_names=BASE_LINK_NAME),
+            "sensor_cfg": SceneEntityCfg("height_scanner"),
         },
     )
 

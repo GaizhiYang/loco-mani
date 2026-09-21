@@ -101,8 +101,8 @@ D1_PIPER_CFG = ArticulationCfg(
         # DO NOT MOVE IF POSSIBLE
         "joint1": DelayedPDActuatorCfg(
             joint_names_expr=["joint1"],
-            # effort_limit=20.0,
-            # effort_limit_sim=20.0,
+            effort_limit=20.0,
+            #effort_limit_sim=20.0,
             stiffness=80.0,
             damping=5.0,
             armature=0.01,
@@ -112,8 +112,8 @@ D1_PIPER_CFG = ArticulationCfg(
         ),
         "joint2": DelayedPDActuatorCfg(
             joint_names_expr=["joint2"],
-            # effort_limit=20.0,
-            # effort_limit_sim=20.0,
+            effort_limit=20.0,
+            #effort_limit_sim=20.0,
             stiffness=80.0,
             damping=5.0,
             armature=0.01,
@@ -123,8 +123,8 @@ D1_PIPER_CFG = ArticulationCfg(
         ),
         "joint3": DelayedPDActuatorCfg(
             joint_names_expr=["joint3"],
-            # effort_limit=15.0,
-            # effort_limit_sim=15.0,
+            effort_limit=15.0,
+            #effort_limit_sim=15.0,
             stiffness=80.0,
             damping=5.0,
             armature=0.01,
@@ -134,7 +134,7 @@ D1_PIPER_CFG = ArticulationCfg(
         ),
         "joint4": DelayedPDActuatorCfg(
             joint_names_expr=["joint4"],
-            # effort_limit=7.0,
+            effort_limit=10.0,
             # effort_limit_sim=7.0,
             stiffness=40.0,
             damping=5.0,
@@ -145,7 +145,7 @@ D1_PIPER_CFG = ArticulationCfg(
         ),
         "joint5": DelayedPDActuatorCfg(
             joint_names_expr=["joint5"],
-            # effort_limit=5.0,
+            effort_limit=10.0,
             # effort_limit_sim=5.0,
             stiffness=25.0,
             damping=1.5,
@@ -156,7 +156,7 @@ D1_PIPER_CFG = ArticulationCfg(
         ),
         "joint6": DelayedPDActuatorCfg(
             joint_names_expr=["joint6"],
-            # effort_limit=5.0,
+            effort_limit=10.0,
             # effort_limit_sim=5.0,
             stiffness=25.0,
             damping=1.5,
