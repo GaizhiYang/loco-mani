@@ -18,6 +18,7 @@
 
 import argparse
 import sys
+from copy import deepcopy
 
 from isaaclab.app import AppLauncher
 
@@ -103,6 +104,32 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 import LeggedManip_Lab.tasks  # noqa: F401
 
 
+def configure_play_base_velocity(env_cfg, task_name: str) -> None:
+    """Use the D1-Piper common configuration's full velocity range for playback."""
+
+    if not task_name.startswith("D1-PIPER-"):
+        return
+
+    velocity_cfg = env_cfg.commands.base_velocity
+    # Private copies keep this playback override out of shared/training configs.
+    velocity_cfg.ranges = deepcopy(velocity_cfg.ranges)
+    velocity_cfg.ranges.lin_vel_x = (-1.0, 1.0)
+    velocity_cfg.ranges.lin_vel_y = (-0.6, 0.6)
+    velocity_cfg.ranges.ang_vel_z = (-1.0, 1.0)
+    velocity_cfg.ranges.heading = (-0.0, 0.0)
+    # Disabled velocity curricula restore ranges from limit_ranges on reset;
+    # override both so an episode reset cannot restore another task's limits.
+    velocity_cfg.limit_ranges = deepcopy(velocity_cfg.ranges)
+    velocity_cfg.curriculum_enabled = False
+    velocity_cfg.heading_command = False
+    print(
+        "[INFO] Playback base_velocity ranges: "
+        f"lin_vel_x={velocity_cfg.ranges.lin_vel_x} m/s, "
+        f"lin_vel_y={velocity_cfg.ranges.lin_vel_y} m/s, "
+        f"ang_vel_z={velocity_cfg.ranges.ang_vel_z} rad/s"
+    )
+
+
 @hydra_task_config(args_cli.task, args_cli.agent)
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlBaseRunnerCfg):
     """Play with RSL-RL agent."""
@@ -121,6 +148,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # note: certain randomizations occur in the environment initialization so we set the seed here
     env_cfg.seed = agent_cfg.seed
     env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
+    configure_play_base_velocity(env_cfg, task_name)
 
     # specify directory for logging experiments
     log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)

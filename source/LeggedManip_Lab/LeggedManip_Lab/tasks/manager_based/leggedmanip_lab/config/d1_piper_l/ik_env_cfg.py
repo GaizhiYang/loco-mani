@@ -19,30 +19,36 @@ task.  The arm action term consumes no policy dimensions: it reads a 7-D
 end-effector pose command expressed in ``piper_base_link``, and uses
 IsaacLab's ``DifferentialIKController`` directly in that same frame to compute
 six arm joint targets.  PhysX gravity-compensation torque is added as actuator
-feed-forward.  The actor policy observation likewise contains only the 16
-leg/wheel joint states and 16 leg/wheel action history; the arm joint states
-and command-driven arm action are reserved for the privileged critic/control
-path.
+feed-forward.  Joint state/action observations contain only locomotion
+terms; the actor also receives the commanded end-effector pose.
 """
+
+from copy import deepcopy
 
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
 
-from ... import mdp
-from .d1_piper_common_env_cfg import CommandsCfg, D1_LEG_JOINT_NAMES, D1_WHEEL_NAMES
-from .wbc_env_cfg import D1PiperWBCEnvCfg
-from .d1_piper_common_env_cfg import D1PiperBaseEnvCfg
-
-from .d1_piper_common_env_cfg import D1PiperBaseEnvCfg
-#from LeggedManip_Lab.assets.go2_piper.go2_piper_articulation_cfg import GO2_PIPER_CFG
 from LeggedManip_Lab.assets.d1_piper_l.d1_piper_articulation_cfg import D1_PIPER_CFG
-#from LeggedManip_Lab.tasks.manager_based.leggedmanip_lab.leggedmanip_lab_env_cfg import *
-from LeggedManip_Lab.tasks.manager_based.leggedmanip_lab.config.d1_piper_l.d1_piper_common_env_cfg import *
+from LeggedManip_Lab.assets.d1_piper_l.ik_helpers import spawn_d1_piper_ik
+
+from ... import mdp
+from .d1_piper_common_env_cfg import (
+    CommandsCfg,
+    D1_LEG_JOINT_NAMES,
+    D1_LEG_POS_JOINT_NAMES,
+    D1_WHEEL_NAMES,
+    D1PiperBaseEnvCfg,
+)
 
 @configclass
 class D1PiperIKEnvCfg(D1PiperBaseEnvCfg):
-    """D1-Piper task with 16-D leg policy and command-driven arm IK."""
+    """16-D leg/wheel policy with the standalone script's arm IK from step one.
+
+    The arm runs at 200 Hz; the leg/wheel policy runs at 50 Hz. Unlike the
+    fixed-base diagnostic, training keeps the base free and tracks successive
+    pose commands continuously, resetting the arm only at episode boundaries.
+    """
 
     # Unlike WBC, this task uses the standard body-pose command.  Its complete
     # 7-D command (position + quaternion) is relative to piper_base_link.
@@ -51,35 +57,59 @@ class D1PiperIKEnvCfg(D1PiperBaseEnvCfg):
     def __post_init__(self) -> None:
         super().__post_init__()
 
-                # scene
-        self.scene.robot: ArticulationCfg = D1_PIPER_CFG.replace(
+        self.scene.robot = deepcopy(D1_PIPER_CFG).replace(
             prim_path="{ENV_REGEX_NS}/Robot"
         )
+        # Correct helper-frame payloads before physics replication, without
+        # modifying the original USD, shared D1_PIPER_CFG, or WBC task.
+        self.scene.robot.spawn.func = spawn_d1_piper_ik
+        self.scene.robot.spawn.articulation_props.fix_root_link = False
+        self.sim.dt = 0.005
+        self.decimation = 4
+        self.sim.render_interval = self.decimation
+        self.scene.contact_forces.update_period = self.sim.dt
 
-        # observations
+        # Use modest randomization while learning balance with the arm load.
+        self.events.push_robot = None
+        self.events.add_base_mass.params["mass_distribution_params"] = (0.0, 2.0)
+        self.events.add_base_com.params["com_range"] = {
+            axis: (-0.01, 0.01) for axis in ("x", "y", "z")
+        }
+        self.events.randomize_actuator_gains.params["stiffness_distribution_params"] = (0.9, 1.1)
+        self.events.randomize_actuator_gains.params["damping_distribution_params"] = (0.9, 1.1)
+        # Keep the arm's tested PD gains; randomize only policy-controlled joints.
+        self.events.randomize_actuator_gains.params["asset_cfg"] = SceneEntityCfg(
+            "robot", joint_names=D1_LEG_JOINT_NAMES
+        )
+        self.events.physics_material.params["static_friction_range"] = (0.6, 1.0)
+        self.events.physics_material.params["dynamic_friction_range"] = (0.6, 1.0)
+        self.events.physics_material.params["restitution_range"] = (0.0, 0.0)
 
-        # curriculum
+        # Match the diagnostic's full uniform pose range in piper_base_link.
+        # Independent XYZ/RPY limits do not guarantee every pose is reachable.
+        self.commands.ee_pose.limit_ranges = mdp.command_cfg.UniformPoseCommandCfg.Ranges(
+            pos_x=(0.15, 0.50),
+            pos_y=(-0.30, 0.30),
+            pos_z=(0.10, 0.55),
+            roll=(-0.45, 0.45),
+            pitch=(0.90, 2.00),
+            yaw=(-0.60, 0.60),
+        )
+        self.commands.ee_pose.ranges = deepcopy(self.commands.ee_pose.limit_ranges)
+        self.commands.ee_pose.resampling_time_range = (3.0, 3.0)
+        self.commands.ee_pose.curriculum_enabled = False
+        self.curriculum.pos_cmd_levels = None
 
-        # events
-        #self.events.push_robot = None
-        self.events.randomize_rigid_body_inertia = None
-        self.events.reset_robot_joints = None
-
-        # commands
-        self.commands.ee_pose.curriculum_enabled = True
-
-        # The all-zero Piper pose has a nearly singular 6-D pose Jacobian.
-        # Start this IK task from the same interior, bent configuration used
-        # by the standalone IK diagnostic.  This only changes the IK task;
-        # the flat/WBC configurations retain their original reset pose.
+        # The same bent reset pose as run_d1_piper_diff_ik.py avoids starting
+        # pose IK at the neutral configuration's singularity and joint limits.
         self.scene.robot.init_state.joint_pos.pop("joint[1-6]", None)
         self.scene.robot.init_state.joint_pos.update(
             {
                 "joint1": 0.0,
-                "joint2": 0.5,
-                "joint3": -0.8,
+                "joint2": 1.0,
+                "joint3": -1.5,
                 "joint4": 0.0,
-                "joint5": 0.3,
+                "joint5": 0.5,
                 "joint6": 0.0,
             }
         )
@@ -90,10 +120,12 @@ class D1PiperIKEnvCfg(D1PiperBaseEnvCfg):
         self.commands.ee_pose.root_name = "piper_base_link"
 
         # The arm is driven entirely by the command-driven IK action.  Keep
-        # only the 16 leg/wheel joints in the actor's proprioceptive state;
-        # the privileged critic retains the full state from the common
-        # configuration.  Wheel positions remain zero-valued placeholders,
-        # preserving the existing D1 observation convention.
+        # only the 16 leg/wheel joints in the actor's proprioceptive state.
+        # The critic is narrowed below to the same leg/wheel state; arm
+        # states are omitted because the arm is command-driven by IK; the
+        # actor retains the desired end-effector pose.  Wheel positions
+        # remain zero-valued placeholders, preserving the existing D1
+        # observation convention.
         self.observations.policy.joint_pos.params["asset_cfg"] = SceneEntityCfg(
             "robot", joint_names=D1_LEG_JOINT_NAMES, preserve_order=True
         )
@@ -104,6 +136,44 @@ class D1PiperIKEnvCfg(D1PiperBaseEnvCfg):
         # Do not expose the command-driven arm action in the actor history.
         # This returns the eight leg/wheel terms (16 values) explicitly.
         self.observations.policy.actions.func = mdp.last_leg_action
+
+        # The IK arm is driven from the end-effector command and is not part
+        # of the policy action.  Keep the privileged critic focused on the
+        # quantities available to the locomotion policy: remove the arm
+        # command and arm end-effector pose, and select only the 16 D1
+        # leg/wheel joints from mixed joint observations.  This override is
+        # local to the IK task; the shared CriticCfg remains unchanged for
+        # the WBC and other D1-Piper tasks.
+        self.observations.critic.pos_commands = None
+        self.observations.critic.ee_link0_rel_pose = None
+        self.observations.critic.joint_pos.params["asset_cfg"] = SceneEntityCfg(
+            "robot", joint_names=D1_LEG_JOINT_NAMES, preserve_order=True
+        )
+        self.observations.critic.joint_pos.params["wheel_asset_cfg"] = SceneEntityCfg(
+            "robot", joint_names=D1_WHEEL_NAMES, preserve_order=True
+        )
+        self.observations.critic.joint_vel.params["joint_names"] = D1_LEG_JOINT_NAMES
+        self.observations.critic.joint_torques.params["asset_cfg"] = SceneEntityCfg(
+            "robot", joint_names=D1_LEG_JOINT_NAMES, preserve_order=True
+        )
+        # The arm action term has zero policy dimensions.  Select the leg
+        # action terms explicitly so this remains true if an arm term is
+        # added or changed in a future configuration.
+        self.observations.critic.actions.func = mdp.last_leg_action
+
+        # JointAction clips *after* scaling and adding the default pose.
+        # Bound absolute leg targets to +/-0.5 rad about the reset posture,
+        # and wheel targets to +/-15 rad/s, including non-RSL callers.
+        for leg in ("fl", "fr", "rl", "rr"):
+            position_action = getattr(self.actions, f"joint_pos_{leg}")
+            position_action.clip = {
+                name: (
+                    self.scene.robot.init_state.joint_pos[name] - 0.5,
+                    self.scene.robot.init_state.joint_pos[name] + 0.5,
+                )
+                for name in position_action.joint_names
+            }
+            getattr(self.actions, f"joint_vel_{leg}").clip = {".*": (-15.0, 15.0)}
 
         # Keep the four leg position and four wheel velocity terms.  The arm
         # term below consumes zero policy dimensions and is driven directly by
@@ -116,7 +186,7 @@ class D1PiperIKEnvCfg(D1PiperBaseEnvCfg):
                 command_type="pose",
                 use_relative_mode=False,
                 ik_method="dls",
-                ik_params={"lambda_val": 0.05},
+                ik_params={"lambda_val": 0.02},
             ),
             # Identity offset: the target frame is the actual end_effector
             # body, so no additional tool-frame transform is required.
@@ -124,6 +194,10 @@ class D1PiperIKEnvCfg(D1PiperBaseEnvCfg):
             gravity_compensation=True,
             command_name="ee_pose",
             reference_frame_name="piper_base_link",
+            # Start tracking immediately, as in the standalone diagnostic.
+            arm_control_start_iteration=None,
+            steps_per_iteration=24,
+            max_joint_target_velocity=1.0,
             debug_vis=False,
         )
 
@@ -146,6 +220,17 @@ class D1PiperIKEnvCfg(D1PiperBaseEnvCfg):
         self.rewards.action_rate_l2.weight = -0.01  # action_rate
         self.rewards.stand_still.weight = -1.0
         self.rewards.stand_nice.weight = -2.0
+        # The command-driven arm is not a policy output.  Do not ask the
+        # locomotion policy to undo its commanded motion or return it to zero.
+        self.rewards.arm_deviation.weight = 0.0
+        self.rewards.joint_acc_l2.params["asset_cfg"] = SceneEntityCfg(
+            "robot", joint_names=D1_LEG_POS_JOINT_NAMES
+        )
+        self.rewards.dof_pos_limits.params["asset_cfg"] = SceneEntityCfg(
+            "robot", joint_names=D1_LEG_POS_JOINT_NAMES
+        )
+        for reward in (self.rewards.dof_torques_l2, self.rewards.joint_power):
+            reward.params["asset_cfg"] = SceneEntityCfg("robot", joint_names=D1_LEG_JOINT_NAMES)
         #self.rewards.dont_wait.weight = -0.5  # dont_wait
         # self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_hip_l1", -0.2, HIP_JOINT_NAMES)
         # self.rewards.create_joint_deviation_l1_rewterm("joint_deviation_l1", -0.1, [".*thigh_joint", ".*calf_joint"])
@@ -174,6 +259,7 @@ class D1PiperIKEnvCfg_PLAY(D1PiperIKEnvCfg):
         self.scene.num_envs = 50
         self.scene.env_spacing = 2.0
         self.observations.policy.enable_corruption = False
+        # Match training: full pose workspace and IK active from the first step.
+        self.actions.joint_pos.arm_control_start_iteration = None
         self.commands.base_velocity.ranges = self.commands.base_velocity.limit_ranges
-        self.commands.ee_pose.ranges = self.commands.ee_pose.limit_ranges
-        self.commands.ee_pose.limit_ranges.pos_y = (0.0, 0.0)
+        self.commands.ee_pose.ranges = deepcopy(self.commands.ee_pose.limit_ranges)

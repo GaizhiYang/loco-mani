@@ -107,3 +107,11 @@ class D1PiperIKPPORunnerCfg(D1PiperWBCPPORunnerCfg):
     """PPO configuration for the task-space differential-IK action task."""
 
     experiment_name = "d1_piper_ik"
+    clip_actions = 3.0
+
+    def __post_init__(self):
+        super().__post_init__()
+        # Start with smaller leg/wheel perturbations; the environment also
+        # bounds physical position/velocity targets after action scaling.
+        self.actor.distribution_cfg.init_std = 0.5
+        self.algorithm.entropy_coef = 0.001

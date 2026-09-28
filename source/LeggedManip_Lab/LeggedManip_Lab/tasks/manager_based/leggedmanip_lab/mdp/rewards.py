@@ -93,15 +93,13 @@ def stand_nice(
     command_threshold: float = 0.06,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 ) -> torch.Tensor:
-    """Penalize base velocity and joint position offsets when the command is very small."""
+    """Penalize motion and posture error for small commands.
+
+    Select only posture joints in ``asset_cfg``: rolling wheel angles must
+    not be driven back to their reset positions.
+    """
     asset: Articulation = env.scene[asset_cfg.name]
-
-    if getattr(asset_cfg, "joint_names", None):
-        joint_ids = [asset.find_joints(joint_name)[0] for joint_name in asset_cfg.joint_names]
-        joint_ids = torch.as_tensor(joint_ids, device=env.device, dtype=torch.long)
-    else:
-        joint_ids = asset_cfg.joint_ids
-
+    joint_ids = asset_cfg.joint_ids
     diff = asset.data.joint_pos[:, joint_ids] - asset.data.default_joint_pos[:, joint_ids]
     joint_pos_error = torch.sum(torch.square(diff).reshape(diff.shape[0], -1), dim=1)
 

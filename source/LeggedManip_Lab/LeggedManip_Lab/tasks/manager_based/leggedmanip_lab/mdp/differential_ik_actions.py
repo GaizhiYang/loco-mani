@@ -135,8 +135,10 @@ class CommandDifferentialIKGravityCompensationAction(
     the ``ee_pose`` command from the environment's command manager, where the
     target pose is expressed in ``reference_frame_name`` (the Piper arm base),
     transforms the measured pose and PhysX Jacobian to that same frame, and
-    solves IK every simulation step.  The leg and wheel action terms therefore
-    remain the only policy outputs.
+    solves IK every simulation step after the optional staged hold period.  In
+    the optional hold period it sends default joint targets while retaining the
+    gravity feed-forward.  The leg and wheel action terms therefore remain the
+    only policy outputs throughout training.
     """
 
     cfg: "CommandDifferentialIKGravityCompensationActionCfg"
@@ -159,6 +161,22 @@ class CommandDifferentialIKGravityCompensationAction(
         self._reference_body_idx = reference_body_ids[0]
         self._env = env
         self._joint_pos_des = torch.zeros_like(self._asset.data.joint_pos[:, self._joint_ids])
+        if cfg.max_joint_target_velocity <= 0.0:
+            raise ValueError("max_joint_target_velocity must be positive.")
+        # apply_actions runs once per physics substep, not per policy step.
+        self._max_joint_target_step = cfg.max_joint_target_velocity * env.physics_dt
+        self._target_needs_init = torch.ones(self.num_envs, device=self.device, dtype=torch.bool)
+        # ``common_step_counter`` counts manager-environment steps, whereas
+        # the RSL-RL runner reports training progress in PPO iterations.  The
+        # configuration stores both values so that the arm can be held at a
+        # deterministic pose for the requested number of training iterations
+        # without consuming any policy action dimensions.
+        self._arm_control_start_step = (
+            cfg.arm_control_start_iteration * cfg.steps_per_iteration
+            if cfg.arm_control_start_iteration is not None
+            else None
+        )
+        self._ik_phase_active = False
 
     def process_actions(self, actions: torch.Tensor) -> None:
         """Consume the empty action slice; the command manager supplies the target."""
@@ -171,6 +189,16 @@ class CommandDifferentialIKGravityCompensationAction(
 
     def apply_actions(self) -> None:
         """Solve command-space IK and apply PD position plus gravity feed-forward."""
+
+        # Optional curriculum phase: hold the configured default posture. This is
+        # intentionally a position target (rather than skipping the action
+        # term), so the existing PD actuator and gravity feed-forward keep the
+        # arm physically supported while the leg policy learns to stand.
+        if not self._is_ik_phase_active():
+            self._joint_pos_des[:] = self._asset.data.default_joint_pos[:, self._joint_ids]
+            self._asset.set_joint_position_target(self._joint_pos_des, joint_ids=self._joint_ids)
+            self._apply_gravity_compensation()
+            return
 
         # All three IK quantities below are expressed in piper_base_link:
         # current EE pose, desired command pose, and geometric Jacobian.
@@ -189,11 +217,44 @@ class CommandDifferentialIKGravityCompensationAction(
 
         joint_pos = self._asset.data.joint_pos[:, self._joint_ids]
         jacobian = self._compute_reference_frame_jacobian()
-        self._joint_pos_des[:] = self._ik_controller.compute(
+        joint_pos_goal = self._ik_controller.compute(
             ee_pos_piper, ee_quat_piper, jacobian, joint_pos
         )
+        self._update_joint_target(joint_pos_goal, joint_pos)
         self._asset.set_joint_position_target(self._joint_pos_des, joint_ids=self._joint_ids)
         self._apply_gravity_compensation()
+
+    def _update_joint_target(self, joint_pos_goal: torch.Tensor, joint_pos: torch.Tensor) -> None:
+        """Limit IK targets and slew them from the previous commanded pose.
+
+        Seed from measured joints on first activation and after each reset so
+        a new episode never inherits a target from the previous episode.
+        Hard limits preserve valid reset poses that lie outside soft limits.
+        """
+        limits = self._asset.data.joint_pos_limits[:, self._joint_ids]
+        initial_target = joint_pos.clamp(min=limits[..., 0], max=limits[..., 1])
+        self._joint_pos_des[:] = torch.where(
+            self._target_needs_init.unsqueeze(-1), initial_target, self._joint_pos_des
+        )
+        self._target_needs_init.fill_(False)
+        joint_pos_goal = joint_pos_goal.clamp(min=limits[..., 0], max=limits[..., 1])
+        delta = (joint_pos_goal - self._joint_pos_des).clamp(
+            min=-self._max_joint_target_step, max=self._max_joint_target_step
+        )
+        self._joint_pos_des.add_(delta)
+        self._joint_pos_des.clamp_(min=limits[..., 0], max=limits[..., 1])
+
+    def _is_ik_phase_active(self) -> bool:
+        """Return whether the configured PPO iteration threshold has passed."""
+
+        if self._arm_control_start_step is None:
+            return True
+        # The counter is incremented after each environment step.  Using a
+        # ``>=`` comparison enables normal IK once the configured rollout
+        # threshold has been reached.
+        active = self._env.common_step_counter >= self._arm_control_start_step
+        self._ik_phase_active = bool(active)
+        return self._ik_phase_active
 
     def _compute_reference_frame_pose(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Return the end-effector pose relative to ``piper_base_link``."""
@@ -253,8 +314,10 @@ class CommandDifferentialIKGravityCompensationAction(
         super().reset(env_ids)
         if env_ids is None:
             self._joint_pos_des.zero_()
+            self._target_needs_init.fill_(True)
         else:
             self._joint_pos_des[env_ids] = 0.0
+            self._target_needs_init[env_ids] = True
 
 
 @configclass
@@ -268,3 +331,15 @@ class CommandDifferentialIKGravityCompensationActionCfg(
     clip: dict | None = None
     command_name: str = "ee_pose"
     reference_frame_name: str = "piper_base_link"
+    arm_control_start_iteration: int | None = None
+    """PPO iteration at which command-driven IK is enabled.
+
+    Set to ``None`` to enable IK from the first iteration.  The iteration is
+    converted to environment steps using :attr:`steps_per_iteration`.
+    """
+
+    steps_per_iteration: int = 24
+    """RSL-RL rollout length used to convert PPO iterations to env steps."""
+
+    max_joint_target_velocity: float = 1.0
+    """Maximum rate of change of each IK position target, in rad/s."""

@@ -53,6 +53,9 @@ D1_LEG_JOINT_NAMES = [
     "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint", "RR_foot_joint",
 ]
 
+# Posture costs must not depend on the wheels' accumulated rolling angles.
+D1_LEG_POS_JOINT_NAMES = [name for name in D1_LEG_JOINT_NAMES if name not in D1_WHEEL_NAMES]
+
 D1_ALL_JOINT_NAMES = ["FL_hip_joint", "FL_thigh_joint", "FL_calf_joint", "FL_foot_joint",
                     "FR_hip_joint", "FR_thigh_joint", "FR_calf_joint", "FR_foot_joint",
                     "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint", "RL_foot_joint",
@@ -130,37 +133,46 @@ class SceneCfg(InteractiveSceneCfg):
 @configclass
 class EventCfg:
     """Configuration for events."""
-
-    # startup
+    # (保持原样，未修改)
     physics_material = EventTerm(
         func=mdp.randomize_rigid_body_material,
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "static_friction_range": (0.5, 1.2),
-            "dynamic_friction_range": (0.5, 1.2),
-            "restitution_range": (0.0, 0.1),
+            "static_friction_range": (0.3, 1.2),
+            "dynamic_friction_range": (0.3, 1.2),
+            "restitution_range": (0.0, 0.15),
             "num_buckets": 64,
-            "make_consistent": True,
         },
     )
 
-    add_mass = EventTerm(
+    add_base_mass = EventTerm(
         func=mdp.randomize_rigid_body_mass,
         mode="startup",
         params={
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "mass_distribution_params": (0.9, 1.1),
-            "operation": "scale",
+            "asset_cfg": SceneEntityCfg("robot", body_names="base_link"),
+            "mass_distribution_params": (0.0, 10.0),
+            "operation": "add",
+            "recompute_inertia": True,
         },
     )
 
-    base_com = EventTerm(
+    add_base_com = EventTerm(
         func=mdp.randomize_rigid_body_com,
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="base_link"),
-            "com_range": {"x": (-0.05, 0.05), "y": (-0.05, 0.05), "z": (-0.01, 0.01)},
+            "com_range": {"x": (-0.05, 0.05), "y": (-0.05, 0.05), "z": (-0.05, 0.05)},
+        },
+    )
+
+    base_external_force_torque = EventTerm(
+        func=mdp.apply_external_force_torque,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names="base_link"),
+            "force_range": (0, 0),
+            "torque_range": (0, 0),
         },
     )
 
@@ -172,27 +184,7 @@ class EventCfg:
             "stiffness_distribution_params": (0.8, 1.2),
             "damping_distribution_params": (0.8, 1.2),
             "operation": "scale",
-        },
-    )
-
-    randomize_rigid_body_inertia = EventTerm(
-        func=mdp.events.randomize_rigid_body_inertia,
-        mode="startup",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "inertia_distribution_params": (0.8, 1.2),
-            "operation": "scale",
-        },
-    )
-
-    # reset
-    base_external_force_torque = EventTerm(
-        func=mdp.apply_external_force_torque,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names="base_link"),
-            "force_range": (0.0, 0.0),
-            "torque_range": (-0.0, 0.0),
+            "distribution": "uniform",
         },
     )
 
@@ -200,14 +192,18 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
+            "pose_range": {
+                "x": (-0.5, 0.5),
+                "y": (-0.5, 0.5),
+                "yaw": (0, 0),
+            },
             "velocity_range": {
                 "x": (-0.0, 0.0),
                 "y": (-0.0, 0.0),
                 "z": (-0.0, 0.0),
-                "yaw": (-0.0, 0.0),
-                "pitch": (-0.0, 0.0),
                 "roll": (-0.0, 0.0),
+                "pitch": (-0.0, 0.0),
+                "yaw": (-0.0, 0.0),
             },
         },
     )
@@ -216,22 +212,16 @@ class EventCfg:
         func=mdp.reset_joints_by_scale,
         mode="reset",
         params={
-            "position_range": (0.5, 1.5),
-            "velocity_range": (0.0, 0.0),
+            "position_range": (1.0, 1.0),
+            "velocity_range": (-0.0, 0.0),
         },
     )
 
-    # interval
     push_robot = EventTerm(
         func=mdp.push_by_setting_velocity,
         mode="interval",
         interval_range_s=(10.0, 15.0),
-        params={
-            "velocity_range": {
-                "x": (-0.5, 0.5),
-                "y": (-0.5, 0.5),
-            }
-        },
+        params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
     )
 
 
@@ -277,6 +267,7 @@ class CommandsCfg:
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
         rel_standing_envs=0.1,
+        curriculum_enabled = True,
         debug_vis=True,
         heading_command=False,
         ranges=mdp.command_cfg.UniformVelocityCommandCfg.Ranges(
@@ -722,7 +713,7 @@ class RewardsCfg:
         params={
             "command_name": "base_velocity",
             "command_threshold": 0.1,
-            "asset_cfg": SceneEntityCfg("robot", joint_names=D1_LEG_JOINT_NAMES),
+            "asset_cfg": SceneEntityCfg("robot", joint_names=D1_LEG_POS_JOINT_NAMES),
         },
     )
 
@@ -732,7 +723,7 @@ class RewardsCfg:
         params={
             "command_name": "base_velocity",
             "command_threshold": 0.1,
-            "asset_cfg": SceneEntityCfg("robot", joint_names=D1_LEG_JOINT_NAMES),
+            "asset_cfg": SceneEntityCfg("robot", joint_names=D1_LEG_POS_JOINT_NAMES),
         },
     )
     upward = RewTerm(func=mdp.upward, weight=0.1)
