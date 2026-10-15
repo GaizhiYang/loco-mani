@@ -70,20 +70,20 @@ class D1PiperIKEnvCfg(D1PiperBaseEnvCfg):
         self.scene.contact_forces.update_period = self.sim.dt
 
         # Use modest randomization while learning balance with the arm load.
-        self.events.push_robot = None
-        self.events.add_base_mass.params["mass_distribution_params"] = (0.0, 2.0)
-        self.events.add_base_com.params["com_range"] = {
-            axis: (-0.01, 0.01) for axis in ("x", "y", "z")
-        }
-        self.events.randomize_actuator_gains.params["stiffness_distribution_params"] = (0.9, 1.1)
-        self.events.randomize_actuator_gains.params["damping_distribution_params"] = (0.9, 1.1)
+        #self.events.push_robot = None
+        # self.events.add_base_mass.params["mass_distribution_params"] = (0.0, 2.0)
+        # self.events.add_base_com.params["com_range"] = {
+        #     axis: (-0.01, 0.01) for axis in ("x", "y", "z")
+        # }
+        # self.events.randomize_actuator_gains.params["stiffness_distribution_params"] = (0.9, 1.1)
+        # self.events.randomize_actuator_gains.params["damping_distribution_params"] = (0.9, 1.1)
         # Keep the arm's tested PD gains; randomize only policy-controlled joints.
         self.events.randomize_actuator_gains.params["asset_cfg"] = SceneEntityCfg(
             "robot", joint_names=D1_LEG_JOINT_NAMES
         )
-        self.events.physics_material.params["static_friction_range"] = (0.6, 1.0)
-        self.events.physics_material.params["dynamic_friction_range"] = (0.6, 1.0)
-        self.events.physics_material.params["restitution_range"] = (0.0, 0.0)
+        # self.events.physics_material.params["static_friction_range"] = (0.6, 1.0)
+        # self.events.physics_material.params["dynamic_friction_range"] = (0.6, 1.0)
+        # self.events.physics_material.params["restitution_range"] = (0.0, 0.0)
 
         # Match the diagnostic's full uniform pose range in piper_base_link.
         # Independent XYZ/RPY limits do not guarantee every pose is reachable.

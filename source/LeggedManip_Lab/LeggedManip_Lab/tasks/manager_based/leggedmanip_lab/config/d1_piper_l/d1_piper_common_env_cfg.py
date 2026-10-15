@@ -171,8 +171,8 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="base_link"),
-            "force_range": (0, 0),
-            "torque_range": (0, 0),
+            "force_range": (-10.0, 10.0),
+            "torque_range": (-10.0, 10.0),
         },
     )
 
@@ -198,12 +198,12 @@ class EventCfg:
                 "yaw": (0, 0),
             },
             "velocity_range": {
-                "x": (-0.0, 0.0),
-                "y": (-0.0, 0.0),
-                "z": (-0.0, 0.0),
-                "roll": (-0.0, 0.0),
-                "pitch": (-0.0, 0.0),
-                "yaw": (-0.0, 0.0),
+                "x": (-0.5, 0.5),
+                "y": (-0.5, 0.5),
+                "z": (-0.5, 0.5),
+                "roll": (-0.5, 0.5),
+                "pitch": (-0.5, 0.5),
+                "yaw": (-0.5, 0.5),
             },
         },
     )
@@ -423,13 +423,15 @@ class ObservationsCfg:
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel,
             noise=Unoise(n_min=-0.2, n_max=0.2),
-            scale=0.2,
+            scale=1.0,
             clip=(-100.0, 100.0)
         )
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
             noise=Unoise(n_min=-0.05, n_max=0.05),
+            scale=1.0,
             clip=(-100.0, 100.0)
+
         )
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel_without_wheel,
@@ -456,6 +458,7 @@ class ObservationsCfg:
         velocity_commands = ObsTerm(
             func=mdp.generated_commands,
             params={"command_name": "base_velocity"},
+            scale=(1.0, 1.0, 1.0),
             clip=(-100.0, 100.0)
         )
         pos_commands = ObsTerm(
@@ -474,8 +477,8 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, scale=2.0)
-        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2)
+        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, scale=1.0)
+        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=1.0)
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
         )
@@ -513,7 +516,7 @@ class ObservationsCfg:
             func=mdp.joint_effort,
             params={"asset_cfg": SceneEntityCfg("robot", joint_names=D1_ALL_JOINT_NAMES, preserve_order=True)},
             clip=(-100.0, 100.0), 
-            scale=0.1,
+            scale=1.0,
         )  
         feet_contact = ObsTerm(
             func=mdp.contact,
@@ -521,7 +524,7 @@ class ObservationsCfg:
                 "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")
             },
             clip=(0.0, 1.0),
-            scale=0.1,
+            scale=1.0,
         )
         ee_link0_rel_pose = ObsTerm(
             func=mdp.end_effector_link0_relative_pose,

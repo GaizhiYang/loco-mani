@@ -113,9 +113,9 @@ def configure_play_base_velocity(env_cfg, task_name: str) -> None:
     velocity_cfg = env_cfg.commands.base_velocity
     # Private copies keep this playback override out of shared/training configs.
     velocity_cfg.ranges = deepcopy(velocity_cfg.ranges)
-    velocity_cfg.ranges.lin_vel_x = (-1.0, 1.0)
-    velocity_cfg.ranges.lin_vel_y = (-0.6, 0.6)
-    velocity_cfg.ranges.ang_vel_z = (-1.0, 1.0)
+    velocity_cfg.ranges.lin_vel_x = (-0.0, 0.3)
+    velocity_cfg.ranges.lin_vel_y = (-0.0, 0.0)
+    velocity_cfg.ranges.ang_vel_z = (-0.0, 0.0)
     velocity_cfg.ranges.heading = (-0.0, 0.0)
     # Disabled velocity curricula restore ranges from limit_ranges on reset;
     # override both so an episode reset cannot restore another task's limits.
